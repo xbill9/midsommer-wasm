@@ -63,13 +63,13 @@ pub extern "C" fn check_circle_collision(
 #[no_mangle]
 pub extern "C" fn normalize_vector_x(dx: f32, dy: f32) -> f32 {
     let len = (dx * dx + dy * dy).sqrt();
-    if len == 0.0 { 0.0 } else { dx / len }
+    if len < 1e-5 { 0.0 } else { dx / len }
 }
 
 #[no_mangle]
 pub extern "C" fn normalize_vector_y(dx: f32, dy: f32) -> f32 {
     let len = (dx * dx + dy * dy).sqrt();
-    if len == 0.0 { 0.0 } else { dy / len }
+    if len < 1e-5 { 0.0 } else { dy / len }
 }
 
 // --- PARTICLE SYSTEM ---
@@ -142,32 +142,68 @@ pub extern "C" fn get_active_particles_count() -> i32 {
 
 #[no_mangle]
 pub extern "C" fn get_particle_x(idx: i32) -> f32 {
-    unsafe { PARTICLES[idx as usize].x }
+    unsafe {
+        if idx >= 0 && (idx as usize) < ACTIVE_COUNT {
+            PARTICLES[idx as usize].x
+        } else {
+            0.0
+        }
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn get_particle_y(idx: i32) -> f32 {
-    unsafe { PARTICLES[idx as usize].y }
+    unsafe {
+        if idx >= 0 && (idx as usize) < ACTIVE_COUNT {
+            PARTICLES[idx as usize].y
+        } else {
+            0.0
+        }
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn get_particle_size(idx: i32) -> f32 {
-    unsafe { PARTICLES[idx as usize].size }
+    unsafe {
+        if idx >= 0 && (idx as usize) < ACTIVE_COUNT {
+            PARTICLES[idx as usize].size
+        } else {
+            0.0
+        }
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn get_particle_life(idx: i32) -> f32 {
-    unsafe { PARTICLES[idx as usize].life }
+    unsafe {
+        if idx >= 0 && (idx as usize) < ACTIVE_COUNT {
+            PARTICLES[idx as usize].life
+        } else {
+            0.0
+        }
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn get_particle_max_life(idx: i32) -> f32 {
-    unsafe { PARTICLES[idx as usize].max_life }
+    unsafe {
+        if idx >= 0 && (idx as usize) < ACTIVE_COUNT {
+            PARTICLES[idx as usize].max_life
+        } else {
+            0.0
+        }
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn get_particle_color_idx(idx: i32) -> i32 {
-    unsafe { PARTICLES[idx as usize].color_idx }
+    unsafe {
+        if idx >= 0 && (idx as usize) < ACTIVE_COUNT {
+            PARTICLES[idx as usize].color_idx
+        } else {
+            0
+        }
+    }
 }
 
 #[no_mangle]
@@ -290,15 +326,19 @@ static mut GAME_STATE: GameState = GameState {
     horses_defeated: 0,
 };
 
-// --- PSEUDO RANDOM NUMBER GENERATOR (LCG) ---
+// --- PSEUDO RANDOM NUMBER GENERATOR (Xorshift32) ---
 
 static mut RNG_STATE: u32 = 12345;
 
 fn random_f32() -> f32 {
     unsafe {
-        RNG_STATE = RNG_STATE.wrapping_mul(1103515245).wrapping_add(12345);
-        let val = (RNG_STATE / 65536) % 32768;
-        (val as f32) / 32768.0
+        let mut x = RNG_STATE;
+        if x == 0 { x = 12345; } // Xorshift seed must not be 0
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        RNG_STATE = x;
+        (x as f32) / (u32::MAX as f32)
     }
 }
 
@@ -318,6 +358,12 @@ pub extern "C" fn trigger_sound_wasm(sound_id: i32) {
         if SOUND_EVENT_COUNT < MAX_SOUNDS {
             SOUND_EVENTS[SOUND_EVENT_COUNT] = sound_id;
             SOUND_EVENT_COUNT += 1;
+        } else {
+            // Shift all events left by 1 to discard the oldest and maintain contiguous FIFO indices
+            for i in 1..MAX_SOUNDS {
+                SOUND_EVENTS[i - 1] = SOUND_EVENTS[i];
+            }
+            SOUND_EVENTS[MAX_SOUNDS - 1] = sound_id;
         }
     }
 }
@@ -519,6 +565,235 @@ pub extern "C" fn spawn_item_wasm(x: f32, y: f32, item_type: i32) -> i32 {
     }
 }
 
+// --- MODULAR ENEMY AI BEHAVIOR HELPERS ---
+
+unsafe fn update_shopper_ai(i: usize, dx: f32, dy: f32, dist: f32, dt: f32) {
+    if dist > 1e-5 {
+        ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
+        ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
+        ENEMIES[i].angle = dy.atan2(dx);
+    }
+}
+
+unsafe fn update_drunkard_ai(i: usize, dx: f32, dy: f32, dist: f32, dt: f32) {
+    ENEMIES[i].state_timer -= dt;
+    if ENEMIES[i].state_timer <= 0.0 {
+        if dist > 1e-5 {
+            let b_speed = 5.0;
+            let b_vx = (dx / dist) * b_speed;
+            let b_vy = (dy / dist) * b_speed;
+            spawn_projectile_wasm(ENEMIES[i].x, ENEMIES[i].y, b_vx, b_vy, 10.0, 3, 1, 150.0);
+            trigger_sound_wasm(2); // 'throw'
+        }
+        ENEMIES[i].state_timer = random_range(2.0, 5.0);
+    }
+    if dist > 1e-5 {
+        ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
+        ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
+        ENEMIES[i].angle = dy.atan2(dx);
+    }
+}
+
+unsafe fn update_candy_kid_ai(i: usize, dx: f32, dy: f32, dist: f32, dt: f32) {
+    ENEMIES[i].state_timer -= dt;
+    if ENEMIES[i].state_timer <= 0.0 {
+        if dist > 1e-5 {
+            let c_speed = 6.0;
+            let c_vx = (dx / dist) * c_speed;
+            let c_vy = (dy / dist) * c_speed;
+            spawn_projectile_wasm(ENEMIES[i].x, ENEMIES[i].y, c_vx, c_vy, 8.0, 8, 1, 100.0);
+            trigger_sound_wasm(2); // 'throw'
+        }
+        ENEMIES[i].state_timer = random_range(1.5, 3.0);
+    }
+    if dist > 1e-5 {
+        ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
+        ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
+        ENEMIES[i].angle = dy.atan2(dx);
+    }
+}
+
+unsafe fn update_zappa_fan_ai(i: usize, dx: f32, dy: f32, dist: f32, dt: f32) {
+    ENEMIES[i].state_timer -= dt;
+    if ENEMIES[i].state_timer <= 0.0 {
+        if dist > 1e-5 {
+            let n_speed = 4.0;
+            let n_vx = (dx / dist) * n_speed;
+            let n_vy = (dy / dist) * n_speed;
+            spawn_projectile_wasm(ENEMIES[i].x, ENEMIES[i].y, n_vx, n_vy, 10.0, 4, 1, 160.0);
+        }
+        ENEMIES[i].state_timer = random_range(2.0, 4.0);
+    }
+    if dist > 1e-5 {
+        ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
+        ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
+    }
+}
+
+unsafe fn update_volvo_ai(i: usize, dt: f32) {
+    ENEMIES[i].x += ENEMIES[i].vx * dt * 60.0;
+    if ENEMIES[i].x < -100.0 || ENEMIES[i].x > 1380.0 {
+        ENEMIES[i].active = false;
+    }
+}
+
+unsafe fn update_dalarna_horse_ai(i: usize, dx: f32, dy: f32, dist: f32, dt: f32) {
+    if ENEMIES[i].state == 0 { // Wander
+        if dist > 1e-5 {
+            ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
+            ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
+            ENEMIES[i].angle = dy.atan2(dx);
+        }
+        ENEMIES[i].state_timer -= dt;
+        if ENEMIES[i].state_timer <= 0.0 && dist < 300.0 {
+            ENEMIES[i].state = 1;
+            ENEMIES[i].state_timer = 0.6; // 600ms
+            let safe_dist = if dist > 1e-5 { dist } else { 1.0 };
+            ENEMIES[i].vx = dx / safe_dist;
+            ENEMIES[i].vy = dy / safe_dist;
+        }
+    } else { // Dash
+        ENEMIES[i].x += ENEMIES[i].vx * 5.5 * dt * 60.0;
+        ENEMIES[i].y += ENEMIES[i].vy * 5.5 * dt * 60.0;
+        
+        // Spawn little red run trails at 30% rate
+        if random_f32() < 0.3 {
+            spawn_particle(
+                ENEMIES[i].x, ENEMIES[i].y,
+                0.0, 0.0,
+                15.0, random_range(4.0, 8.0),
+                0, // Red run trail
+            );
+        }
+        
+        ENEMIES[i].state_timer -= dt;
+        if ENEMIES[i].state_timer <= 0.0 {
+            ENEMIES[i].state = 0;
+            ENEMIES[i].state_timer = random_range(1.0, 3.0);
+        }
+    }
+}
+
+unsafe fn update_elk_ai(i: usize, dx: f32, dy: f32, dist: f32, dt: f32) {
+    if ENEMIES[i].state == 0 { // Walk
+        if dist > 1e-5 {
+            ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
+            ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
+            ENEMIES[i].angle = dy.atan2(dx);
+        }
+        ENEMIES[i].state_timer -= dt;
+        if ENEMIES[i].state_timer <= 0.0 && dist < 350.0 {
+            ENEMIES[i].state = 1;
+            ENEMIES[i].state_timer = 0.8; // 800ms warning / steam
+        }
+    } else if ENEMIES[i].state == 1 { // Prep
+        ENEMIES[i].state_timer -= dt;
+        if random_f32() < 0.25 {
+            let face_dir = if dx > 0.0 { 1.0 } else { -1.0 };
+            spawn_particle(
+                ENEMIES[i].x + 18.0 * face_dir, ENEMIES[i].y - 10.0,
+                face_dir * (random_f32() * 1.5 + 0.5), -random_f32() * 1.0,
+                15.0, random_range(4.0, 8.0),
+                4 // nose steam puff
+            );
+        }
+        if ENEMIES[i].state_timer <= 0.0 {
+            ENEMIES[i].state = 2;
+            ENEMIES[i].state_timer = 0.7; // 700ms charge
+            let safe_dist = if dist > 1e-5 { dist } else { 1.0 };
+            ENEMIES[i].vx = (dx / safe_dist) * 6.5;
+            ENEMIES[i].vy = (dy / safe_dist) * 6.5;
+        }
+    } else if ENEMIES[i].state == 2 { // Charge
+        ENEMIES[i].x += ENEMIES[i].vx * dt * 60.0;
+        ENEMIES[i].y += ENEMIES[i].vy * dt * 60.0;
+        ENEMIES[i].state_timer -= dt;
+        
+        // Spawn trail particles at 40% rate
+        if random_f32() < 0.4 {
+            spawn_particle(
+                ENEMIES[i].x, ENEMIES[i].y + 10.0,
+                -ENEMIES[i].vx * 0.2, random_range(-0.75, 0.75),
+                15.0, random_range(4.0, 8.0),
+                5 // charging trail dust
+            );
+        }
+        
+        let hit_wall = ENEMIES[i].x <= 20.0 || ENEMIES[i].x >= 1260.0 || ENEMIES[i].y <= 25.0 || ENEMIES[i].y >= 695.0;
+        if ENEMIES[i].state_timer <= 0.0 || hit_wall {
+            ENEMIES[i].state = 3;
+            ENEMIES[i].state_timer = 0.5; // stomp animation (500ms)
+            
+            trigger_sound_wasm(3); // hit
+            
+            if dist < 75.0 {
+                let mut dmg = 12.0;
+                if PLAYER.shield_active {
+                    dmg *= 0.2;
+                }
+                PLAYER.health -= dmg;
+                
+                // Push back
+                let p_push_x = if dx > 0.0 { 15.0 } else { -15.0 };
+                let p_push_y = if dy > 0.0 { 15.0 } else { -15.0 };
+                PLAYER.x += p_push_x;
+                PLAYER.y += p_push_y;
+                
+                if PLAYER.health <= 0.0 {
+                    GAME_STATE.game_over = true;
+                    trigger_sound_wasm(7); // 'lose'
+                }
+            }
+            
+            // Shockwave dirt particles
+            for _ in 0..18 {
+                let angle = random_f32() * std::f32::consts::TAU;
+                let speed = random_f32() * 3.5 + 1.5;
+                spawn_particle(
+                    ENEMIES[i].x, ENEMIES[i].y + 15.0,
+                    angle.cos() * speed, angle.sin() * speed,
+                    25.0, random_range(5.0, 10.0),
+                    6 // stomp dirt shockwave
+                );
+            }
+        }
+    } else if ENEMIES[i].state == 3 { // Stomp
+        ENEMIES[i].state_timer -= dt;
+        if ENEMIES[i].state_timer <= 0.0 {
+            ENEMIES[i].state = 0;
+            ENEMIES[i].state_timer = random_range(2.0, 4.0);
+        }
+    }
+}
+
+unsafe fn update_ranged_ai(i: usize, dx: f32, dy: f32, dist: f32, dt: f32) {
+    if dist > 1e-5 {
+        ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
+        ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
+        ENEMIES[i].angle = dy.atan2(dx);
+    }
+    
+    ENEMIES[i].state_timer -= dt;
+    if ENEMIES[i].state_timer <= 0.0 {
+        if ENEMIES[i].enemy_type == 7 && dist > 1e-5 { // Guard (Handcuffs 7)
+            let vx = (dx / dist) * 5.0;
+            let vy = (dy / dist) * 5.0;
+            spawn_projectile_wasm(ENEMIES[i].x, ENEMIES[i].y, vx, vy, 11.0, 7, 1, 150.0);
+            trigger_sound_wasm(2);
+        } else if ENEMIES[i].enemy_type == 8 && dist > 1e-5 { // Raver (Glowstick 6)
+            let vx = (dx / dist) * 6.5;
+            let vy = (dy / dist) * 6.5;
+            spawn_projectile_wasm(ENEMIES[i].x, ENEMIES[i].y, vx, vy, 9.0, 6, 1, 120.0);
+        } else if ENEMIES[i].enemy_type == 9 && dist > 1e-5 { // ABBAbot (LaserBall 5)
+            let vx = (dx / dist) * 6.0;
+            let vy = (dy / dist) * 6.0;
+            spawn_projectile_wasm(ENEMIES[i].x, ENEMIES[i].y, vx, vy, 14.0, 5, 1, 180.0);
+            trigger_sound_wasm(4);
+        }
+        ENEMIES[i].state_timer = random_range(2.0, 4.5);
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn update_game_wasm(
     keys_bitmask: i32, // bit 0=W, bit 1=S, bit 2=A, bit 3=D
@@ -610,9 +885,9 @@ pub extern "C" fn update_game_wasm(
                 if ENEMIES[i].active {
                     let dx = ENEMIES[i].x - PLAYER.x;
                     let dy = ENEMIES[i].y - PLAYER.y;
-                    let dist = (dx * dx + dy * dy).sqrt();
-                    if dist < 95.0 {
-                        ENEMIES[i].health -= 35.0;
+                    let dist_sq = dx * dx + dy * dy;
+                    if dist_sq < 9025.0 { // 95.0 * 95.0
+                        let dist = dist_sq.sqrt();
                         trigger_sound_wasm(3); // 'hit'
                         
                         // Spawn melee blood splatters
@@ -623,38 +898,12 @@ pub extern "C" fn update_game_wasm(
                             spawn_particle(ENEMIES[i].x, ENEMIES[i].y, vx, vy, 15.0, random_range(4.0, 8.0), color_idx);
                         }
                         
-                        if dist > 0.0 {
+                        if dist > 1e-5 {
                             ENEMIES[i].x += (dx / dist) * 20.0; // knockback aligned to 20 like JS
                             ENEMIES[i].y += (dy / dist) * 20.0;
                         }
                         
-                        if ENEMIES[i].health <= 0.0 {
-                            ENEMIES[i].active = false;
-                            PLAYER.score += 150;
-                            GAME_STATE.enemies_defeated += 1;
-                            trigger_sound_wasm(4); // 'explode'
-                            
-                            // Spawn death explosion particles
-                            for _ in 0..15 {
-                                let vx = random_range(-4.0, 4.0);
-                                let vy = random_range(-4.0, 4.0);
-                                let color_idx = if random_f32() > 0.5 { 0 } else { 1 };
-                                spawn_particle(ENEMIES[i].x, ENEMIES[i].y, vx, vy, 20.0, random_range(5.0, 10.0), color_idx);
-                            }
-                            
-                            if ENEMIES[i].enemy_type == 5 {
-                                GAME_STATE.horses_defeated += 1;
-                            }
-
-                            if random_f32() < 0.35 {
-                                spawn_item_wasm(ENEMIES[i].x, ENEMIES[i].y, 0);
-                            }
-
-                            let req = get_required_enemies(GAME_STATE.level_index);
-                            if req > 0 && GAME_STATE.enemies_defeated >= req {
-                                GAME_STATE.portal_active = true;
-                            }
-                        }
+                        damage_enemy_internal(i, 35.0);
                     }
                 }
             }
@@ -680,12 +929,14 @@ pub extern "C" fn update_game_wasm(
                     PROJECTILES[i].life -= dt * 60.0;
                     
                     // Tick DoT (30.0 * dt per frame) on nearby enemies within radius (PROJECTILES[i].size)
+                    let radius = PROJECTILES[i].size;
+                    let radius_sq = radius * radius;
                     for j in 0..MAX_ENEMIES {
                         if ENEMIES[j].active {
                             let dx = ENEMIES[j].x - PROJECTILES[i].x;
                             let dy = ENEMIES[j].y - PROJECTILES[i].y;
-                            let dist = (dx * dx + dy * dy).sqrt();
-                            if dist < PROJECTILES[i].size {
+                            let dist_sq = dx * dx + dy * dy;
+                            if dist_sq < radius_sq {
                                 damage_enemy_internal(j, 30.0 * dt);
                             }
                         }
@@ -716,8 +967,9 @@ pub extern "C" fn update_game_wasm(
                         if ENEMIES[j].active {
                             let dx = ENEMIES[j].x - PROJECTILES[i].x;
                             let dy = ENEMIES[j].y - PROJECTILES[i].y;
-                            let dist = (dx * dx + dy * dy).sqrt();
-                            if dist < (PROJECTILES[i].size + ENEMIES[j].size) {
+                            let dist_sq = dx * dx + dy * dy;
+                            let r_sum = PROJECTILES[i].size + ENEMIES[j].size;
+                            if dist_sq < r_sum * r_sum {
                                 if PROJECTILES[i].proj_type == 0 { // Surstromming Can
                                     PROJECTILES[i].active = false;
                                     trigger_sound_wasm(4); // 'explode'
@@ -735,8 +987,9 @@ pub extern "C" fn update_game_wasm(
                 } else { // Enemy projectile hitting player
                     let dx = PLAYER.x - PROJECTILES[i].x;
                     let dy = PLAYER.y - PROJECTILES[i].y;
-                    let dist = (dx * dx + dy * dy).sqrt();
-                    if dist < (PROJECTILES[i].size + 20.0) {
+                    let dist_sq = dx * dx + dy * dy;
+                    let r_sum = PROJECTILES[i].size + 20.0;
+                    if dist_sq < r_sum * r_sum {
                         if PLAYER.damage_cooldown <= 0.0 {
                             let mut dmg = get_projectile_damage(PROJECTILES[i].proj_type);
                             if PLAYER.shield_active {
@@ -765,225 +1018,14 @@ pub extern "C" fn update_game_wasm(
                 let dist = (dx * dx + dy * dy).sqrt();
 
                 match ENEMIES[i].enemy_type {
-                    0 => { // Shopper (simple tracking)
-                        if dist > 0.0 {
-                            ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
-                            ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
-                            ENEMIES[i].angle = dy.atan2(dx);
-                        }
-                    }
-                    1 => { // Drunkard (slow move, throw bottle)
-                        ENEMIES[i].state_timer -= dt;
-                        if ENEMIES[i].state_timer <= 0.0 {
-                            if dist > 0.0 {
-                                let b_speed = 5.0;
-                                let b_vx = (dx / dist) * b_speed;
-                                let b_vy = (dy / dist) * b_speed;
-                                spawn_projectile_wasm(ENEMIES[i].x, ENEMIES[i].y, b_vx, b_vy, 10.0, 3, 1, 150.0);
-                                trigger_sound_wasm(2); // 'throw'
-                            }
-                            ENEMIES[i].state_timer = random_range(2.0, 5.0);
-                        }
-                        if dist > 0.0 {
-                            ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
-                            ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
-                            ENEMIES[i].angle = dy.atan2(dx);
-                        }
-                    }
-                    2 => { // CandyKid (move fast, throw candy)
-                        ENEMIES[i].state_timer -= dt;
-                        if ENEMIES[i].state_timer <= 0.0 {
-                            if dist > 0.0 {
-                                let c_speed = 6.0;
-                                let c_vx = (dx / dist) * c_speed;
-                                let c_vy = (dy / dist) * c_speed;
-                                spawn_projectile_wasm(ENEMIES[i].x, ENEMIES[i].y, c_vx, c_vy, 8.0, 8, 1, 100.0);
-                                trigger_sound_wasm(2); // 'throw'
-                            }
-                            ENEMIES[i].state_timer = random_range(1.5, 3.0);
-                        }
-                        if dist > 0.0 {
-                            ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
-                            ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
-                            ENEMIES[i].angle = dy.atan2(dx);
-                        }
-                    }
-                    3 => { // ZappaFan (floats, throws note)
-                        ENEMIES[i].state_timer -= dt;
-                        if ENEMIES[i].state_timer <= 0.0 {
-                            if dist > 0.0 {
-                                let n_speed = 4.0;
-                                let n_vx = (dx / dist) * n_speed;
-                                let n_vy = (dy / dist) * n_speed;
-                                spawn_projectile_wasm(ENEMIES[i].x, ENEMIES[i].y, n_vx, n_vy, 10.0, 4, 1, 160.0);
-                            }
-                            ENEMIES[i].state_timer = random_range(2.0, 4.0);
-                        }
-                        if dist > 0.0 {
-                            ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
-                            ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
-                        }
-                    }
-                    4 => { // VolvoCar (moves straight horizontally)
-                        ENEMIES[i].x += ENEMIES[i].vx * dt * 60.0;
-                        if ENEMIES[i].x < -100.0 || ENEMIES[i].x > 1380.0 {
-                            ENEMIES[i].active = false;
-                        }
-                    }
-                    5 => { // DalarnaHorse
-                        if ENEMIES[i].state == 0 { // Wander
-                            if dist > 0.0 {
-                                ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
-                                ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
-                                ENEMIES[i].angle = dy.atan2(dx);
-                            }
-                            ENEMIES[i].state_timer -= dt;
-                            if ENEMIES[i].state_timer <= 0.0 && dist < 300.0 {
-                                ENEMIES[i].state = 1;
-                                ENEMIES[i].state_timer = 0.6; // 600ms
-                                let safe_dist = if dist > 0.0 { dist } else { 1.0 };
-                                ENEMIES[i].vx = dx / safe_dist;
-                                ENEMIES[i].vy = dy / safe_dist;
-                            }
-                        } else { // Dash
-                            ENEMIES[i].x += ENEMIES[i].vx * 5.5 * dt * 60.0;
-                            ENEMIES[i].y += ENEMIES[i].vy * 5.5 * dt * 60.0;
-                            
-                            // Spawn little red run trails at 30% rate
-                            if random_f32() < 0.3 {
-                                spawn_particle(
-                                    ENEMIES[i].x, ENEMIES[i].y,
-                                    0.0, 0.0,
-                                    15.0, random_range(4.0, 8.0),
-                                    0, // Red run trail
-                                );
-                            }
-                            
-                            ENEMIES[i].state_timer -= dt;
-                            if ENEMIES[i].state_timer <= 0.0 {
-                                ENEMIES[i].state = 0;
-                                ENEMIES[i].state_timer = random_range(1.0, 3.0);
-                            }
-                        }
-                    }
-                    6 => { // Elk state machine
-                        if ENEMIES[i].state == 0 { // Walk
-                            if dist > 0.0 {
-                                ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
-                                ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
-                                ENEMIES[i].angle = dy.atan2(dx);
-                            }
-                            ENEMIES[i].state_timer -= dt;
-                            if ENEMIES[i].state_timer <= 0.0 && dist < 350.0 {
-                                ENEMIES[i].state = 1;
-                                ENEMIES[i].state_timer = 0.8; // 800ms warning / steam
-                            }
-                        } else if ENEMIES[i].state == 1 { // Prep
-                            ENEMIES[i].state_timer -= dt;
-                            if random_f32() < 0.25 {
-                                let face_dir = if dx > 0.0 { 1.0 } else { -1.0 };
-                                spawn_particle(
-                                    ENEMIES[i].x + 18.0 * face_dir, ENEMIES[i].y - 10.0,
-                                    face_dir * (random_f32() * 1.5 + 0.5), -random_f32() * 1.0,
-                                    15.0, random_range(4.0, 8.0),
-                                    4 // nose steam puff
-                                );
-                            }
-                            if ENEMIES[i].state_timer <= 0.0 {
-                                ENEMIES[i].state = 2;
-                                ENEMIES[i].state_timer = 0.7; // 700ms charge
-                                let safe_dist = if dist > 0.0 { dist } else { 1.0 };
-                                ENEMIES[i].vx = (dx / safe_dist) * 6.5;
-                                ENEMIES[i].vy = (dy / safe_dist) * 6.5;
-                            }
-                        } else if ENEMIES[i].state == 2 { // Charge
-                            ENEMIES[i].x += ENEMIES[i].vx * dt * 60.0;
-                            ENEMIES[i].y += ENEMIES[i].vy * dt * 60.0;
-                            ENEMIES[i].state_timer -= dt;
-                            
-                            // Spawn trail particles at 40% rate
-                            if random_f32() < 0.4 {
-                                spawn_particle(
-                                    ENEMIES[i].x, ENEMIES[i].y + 10.0,
-                                    -ENEMIES[i].vx * 0.2, random_range(-0.75, 0.75),
-                                    15.0, random_range(4.0, 8.0),
-                                    5 // charging trail dust
-                                );
-                            }
-                            
-                            let hit_wall = ENEMIES[i].x <= 20.0 || ENEMIES[i].x >= 1260.0 || ENEMIES[i].y <= 25.0 || ENEMIES[i].y >= 695.0;
-                            if ENEMIES[i].state_timer <= 0.0 || hit_wall {
-                                ENEMIES[i].state = 3;
-                                ENEMIES[i].state_timer = 0.5; // stomp animation (500ms)
-                                
-                                trigger_sound_wasm(3); // hit
-                                
-                                if dist < 75.0 {
-                                    let mut dmg = 12.0;
-                                    if PLAYER.shield_active {
-                                        dmg *= 0.2;
-                                    }
-                                    PLAYER.health -= dmg;
-                                    
-                                    // Push back
-                                    let p_push_x = if dx > 0.0 { 15.0 } else { -15.0 };
-                                    let p_push_y = if dy > 0.0 { 15.0 } else { -15.0 };
-                                    PLAYER.x += p_push_x;
-                                    PLAYER.y += p_push_y;
-                                    
-                                    if PLAYER.health <= 0.0 {
-                                        GAME_STATE.game_over = true;
-                                        trigger_sound_wasm(7); // 'lose'
-                                    }
-                                }
-                                
-                                // Shockwave dirt particles
-                                for _ in 0..18 {
-                                    let angle = random_f32() * std::f32::consts::TAU;
-                                    let speed = random_f32() * 3.5 + 1.5;
-                                    spawn_particle(
-                                        ENEMIES[i].x, ENEMIES[i].y + 15.0,
-                                        angle.cos() * speed, angle.sin() * speed,
-                                        25.0, random_range(5.0, 10.0),
-                                        6 // stomp dirt shockwave
-                                    );
-                                }
-                            }
-                        } else if ENEMIES[i].state == 3 { // Stomp
-                            ENEMIES[i].state_timer -= dt;
-                            if ENEMIES[i].state_timer <= 0.0 {
-                                ENEMIES[i].state = 0;
-                                ENEMIES[i].state_timer = random_range(2.0, 4.0);
-                            }
-                        }
-                    }
-                    7 | 8 | 9 => { // Guard, Raver, ABBAbot standard tracking & ranged
-                        if dist > 0.0 {
-                            ENEMIES[i].x += (dx / dist) * ENEMIES[i].speed * dt * 60.0;
-                            ENEMIES[i].y += (dy / dist) * ENEMIES[i].speed * dt * 60.0;
-                            ENEMIES[i].angle = dy.atan2(dx);
-                        }
-                        
-                        ENEMIES[i].state_timer -= dt;
-                        if ENEMIES[i].state_timer <= 0.0 {
-                            if ENEMIES[i].enemy_type == 7 && dist > 0.0 { // Guard (Handcuffs 7)
-                                let vx = (dx / dist) * 5.0;
-                                let vy = (dy / dist) * 5.0;
-                                spawn_projectile_wasm(ENEMIES[i].x, ENEMIES[i].y, vx, vy, 11.0, 7, 1, 150.0);
-                                trigger_sound_wasm(2);
-                            } else if ENEMIES[i].enemy_type == 8 && dist > 0.0 { // Raver (Glowstick 6)
-                                let vx = (dx / dist) * 6.5;
-                                let vy = (dy / dist) * 6.5;
-                                spawn_projectile_wasm(ENEMIES[i].x, ENEMIES[i].y, vx, vy, 9.0, 6, 1, 120.0);
-                            } else if ENEMIES[i].enemy_type == 9 && dist > 0.0 { // ABBAbot (LaserBall 5)
-                                let vx = (dx / dist) * 6.0;
-                                let vy = (dy / dist) * 6.0;
-                                spawn_projectile_wasm(ENEMIES[i].x, ENEMIES[i].y, vx, vy, 14.0, 5, 1, 180.0);
-                                trigger_sound_wasm(4);
-                            }
-                            ENEMIES[i].state_timer = random_range(2.0, 4.5);
-                        }
-                    }
+                    0 => update_shopper_ai(i, dx, dy, dist, dt),
+                    1 => update_drunkard_ai(i, dx, dy, dist, dt),
+                    2 => update_candy_kid_ai(i, dx, dy, dist, dt),
+                    3 => update_zappa_fan_ai(i, dx, dy, dist, dt),
+                    4 => update_volvo_ai(i, dt),
+                    5 => update_dalarna_horse_ai(i, dx, dy, dist, dt),
+                    6 => update_elk_ai(i, dx, dy, dist, dt),
+                    7 | 8 | 9 => update_ranged_ai(i, dx, dy, dist, dt),
                     _ => {}
                 }
 
@@ -995,11 +1037,12 @@ pub extern "C" fn update_game_wasm(
                     if ENEMIES[i].y > 695.0 { ENEMIES[i].y = 695.0; }
                 }
 
-                // Hit player check
-                let dx = PLAYER.x - ENEMIES[i].x;
-                let dy = PLAYER.y - ENEMIES[i].y;
-                let dist = (dx * dx + dy * dy).sqrt();
-                if dist < (ENEMIES[i].size + 20.0) {
+                // Hit player check (using optimized squared distance checks)
+                let hdx = PLAYER.x - ENEMIES[i].x;
+                let hdy = PLAYER.y - ENEMIES[i].y;
+                let hdist_sq = hdx * hdx + hdy * hdy;
+                let r_sum = ENEMIES[i].size + 20.0;
+                if hdist_sq < r_sum * r_sum {
                     if PLAYER.damage_cooldown <= 0.0 {
                         let mut dmg = if ENEMIES[i].enemy_type == 4 { 40.0 } else { 15.0 };
                         if PLAYER.shield_active {
@@ -1023,8 +1066,8 @@ pub extern "C" fn update_game_wasm(
             if ITEMS[i].active {
                 let dx = PLAYER.x - ITEMS[i].x;
                 let dy = PLAYER.y - ITEMS[i].y;
-                let dist = (dx * dx + dy * dy).sqrt();
-                if dist < 35.0 {
+                let dist_sq = dx * dx + dy * dy;
+                if dist_sq < 1225.0 { // 35.0 * 35.0
                     ITEMS[i].active = false;
                     trigger_sound_wasm(5); // 'powerup'
                     
@@ -1112,6 +1155,14 @@ fn damage_enemy_internal(idx: usize, amount: f32) {
             GAME_STATE.enemies_defeated += 1;
             trigger_sound_wasm(4); // 'explode'
             
+            // Spawn death explosion particles
+            for _ in 0..15 {
+                let vx = random_range(-4.0, 4.0);
+                let vy = random_range(-4.0, 4.0);
+                let color_idx = if random_f32() > 0.5 { 0 } else { 1 };
+                spawn_particle(ENEMIES[idx].x, ENEMIES[idx].y, vx, vy, 20.0, random_range(5.0, 10.0), color_idx);
+            }
+            
             if ENEMIES[idx].enemy_type == 5 {
                 GAME_STATE.horses_defeated += 1;
             }
@@ -1179,45 +1230,45 @@ pub extern "C" fn set_player_score(val: i32) { unsafe { PLAYER.score = val; } }
 #[no_mangle]
 pub extern "C" fn get_enemies_max_count() -> i32 { MAX_ENEMIES as i32 }
 #[no_mangle]
-pub extern "C" fn get_enemy_active(idx: i32) -> bool { unsafe { ENEMIES[idx as usize].active } }
+pub extern "C" fn get_enemy_active(idx: i32) -> bool { unsafe { if idx >= 0 && (idx as usize) < MAX_ENEMIES { ENEMIES[idx as usize].active } else { false } } }
 #[no_mangle]
-pub extern "C" fn get_enemy_x(idx: i32) -> f32 { unsafe { ENEMIES[idx as usize].x } }
+pub extern "C" fn get_enemy_x(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ENEMIES { ENEMIES[idx as usize].x } else { 0.0 } } }
 #[no_mangle]
-pub extern "C" fn get_enemy_y(idx: i32) -> f32 { unsafe { ENEMIES[idx as usize].y } }
+pub extern "C" fn get_enemy_y(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ENEMIES { ENEMIES[idx as usize].y } else { 0.0 } } }
 #[no_mangle]
-pub extern "C" fn get_enemy_size(idx: i32) -> f32 { unsafe { ENEMIES[idx as usize].size } }
+pub extern "C" fn get_enemy_size(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ENEMIES { ENEMIES[idx as usize].size } else { 0.0 } } }
 #[no_mangle]
-pub extern "C" fn get_enemy_type(idx: i32) -> i32 { unsafe { ENEMIES[idx as usize].enemy_type } }
+pub extern "C" fn get_enemy_type(idx: i32) -> i32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ENEMIES { ENEMIES[idx as usize].enemy_type } else { 0 } } }
 #[no_mangle]
-pub extern "C" fn get_enemy_health(idx: i32) -> f32 { unsafe { ENEMIES[idx as usize].health } }
+pub extern "C" fn get_enemy_health(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ENEMIES { ENEMIES[idx as usize].health } else { 0.0 } } }
 #[no_mangle]
-pub extern "C" fn get_enemy_max_health(idx: i32) -> f32 { unsafe { ENEMIES[idx as usize].max_health } }
+pub extern "C" fn get_enemy_max_health(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ENEMIES { ENEMIES[idx as usize].max_health } else { 0.0 } } }
 #[no_mangle]
-pub extern "C" fn get_enemy_angle(idx: i32) -> f32 { unsafe { ENEMIES[idx as usize].angle } }
+pub extern "C" fn get_enemy_angle(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ENEMIES { ENEMIES[idx as usize].angle } else { 0.0 } } }
 
 #[no_mangle]
 pub extern "C" fn get_projectiles_max_count() -> i32 { MAX_PROJECTILES as i32 }
 #[no_mangle]
-pub extern "C" fn get_projectile_active(idx: i32) -> bool { unsafe { PROJECTILES[idx as usize].active } }
+pub extern "C" fn get_projectile_active(idx: i32) -> bool { unsafe { if idx >= 0 && (idx as usize) < MAX_PROJECTILES { PROJECTILES[idx as usize].active } else { false } } }
 #[no_mangle]
-pub extern "C" fn get_projectile_x(idx: i32) -> f32 { unsafe { PROJECTILES[idx as usize].x } }
+pub extern "C" fn get_projectile_x(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_PROJECTILES { PROJECTILES[idx as usize].x } else { 0.0 } } }
 #[no_mangle]
-pub extern "C" fn get_projectile_y(idx: i32) -> f32 { unsafe { PROJECTILES[idx as usize].y } }
+pub extern "C" fn get_projectile_y(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_PROJECTILES { PROJECTILES[idx as usize].y } else { 0.0 } } }
 #[no_mangle]
-pub extern "C" fn get_projectile_size(idx: i32) -> f32 { unsafe { PROJECTILES[idx as usize].size } }
+pub extern "C" fn get_projectile_size(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_PROJECTILES { PROJECTILES[idx as usize].size } else { 0.0 } } }
 #[no_mangle]
-pub extern "C" fn get_projectile_type(idx: i32) -> i32 { unsafe { PROJECTILES[idx as usize].proj_type } }
+pub extern "C" fn get_projectile_type(idx: i32) -> i32 { unsafe { if idx >= 0 && (idx as usize) < MAX_PROJECTILES { PROJECTILES[idx as usize].proj_type } else { 0 } } }
 
 #[no_mangle]
 pub extern "C" fn get_items_max_count() -> i32 { MAX_ITEMS as i32 }
 #[no_mangle]
-pub extern "C" fn get_item_active(idx: i32) -> bool { unsafe { ITEMS[idx as usize].active } }
+pub extern "C" fn get_item_active(idx: i32) -> bool { unsafe { if idx >= 0 && (idx as usize) < MAX_ITEMS { ITEMS[idx as usize].active } else { false } } }
 #[no_mangle]
-pub extern "C" fn get_item_x(idx: i32) -> f32 { unsafe { ITEMS[idx as usize].x } }
+pub extern "C" fn get_item_x(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ITEMS { ITEMS[idx as usize].x } else { 0.0 } } }
 #[no_mangle]
-pub extern "C" fn get_item_y(idx: i32) -> f32 { unsafe { ITEMS[idx as usize].y } }
+pub extern "C" fn get_item_y(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ITEMS { ITEMS[idx as usize].y } else { 0.0 } } }
 #[no_mangle]
-pub extern "C" fn get_item_type(idx: i32) -> i32 { unsafe { ITEMS[idx as usize].item_type } }
+pub extern "C" fn get_item_type(idx: i32) -> i32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ITEMS { ITEMS[idx as usize].item_type } else { 0 } } }
 
 #[no_mangle]
 pub extern "C" fn get_level_timer_wasm() -> f32 { unsafe { GAME_STATE.level_timer } }
@@ -1247,11 +1298,11 @@ pub extern "C" fn get_player_speed_boost_active() -> bool { unsafe { PLAYER.spee
 #[no_mangle]
 pub extern "C" fn get_player_shield_active() -> bool { unsafe { PLAYER.shield_active } }
 #[no_mangle]
-pub extern "C" fn get_enemy_state(idx: i32) -> i32 { unsafe { ENEMIES[idx as usize].state } }
+pub extern "C" fn get_enemy_state(idx: i32) -> i32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ENEMIES { ENEMIES[idx as usize].state } else { 0 } } }
 #[no_mangle]
-pub extern "C" fn get_enemy_state_timer(idx: i32) -> f32 { unsafe { ENEMIES[idx as usize].state_timer } }
+pub extern "C" fn get_enemy_state_timer(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ENEMIES { ENEMIES[idx as usize].state_timer } else { 0.0 } } }
 #[no_mangle]
-pub extern "C" fn get_enemy_vx(idx: i32) -> f32 { unsafe { ENEMIES[idx as usize].vx } }
+pub extern "C" fn get_enemy_vx(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ENEMIES { ENEMIES[idx as usize].vx } else { 0.0 } } }
 #[no_mangle]
-pub extern "C" fn get_enemy_vy(idx: i32) -> f32 { unsafe { ENEMIES[idx as usize].vy } }
+pub extern "C" fn get_enemy_vy(idx: i32) -> f32 { unsafe { if idx >= 0 && (idx as usize) < MAX_ENEMIES { ENEMIES[idx as usize].vy } else { 0.0 } } }
 
