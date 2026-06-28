@@ -1,0 +1,18 @@
+{
+  "name": "midsommer-madness",
+  "version": "1.0.0",
+  "description": "Midsommer Madness - Swedish Retro Arcade Game",
+  "main": "index.html",
+  "scripts": {
+    "dev": "npx -y http-server assets -p 0"
+  },
+  "keywords": [
+    "game",
+    "swedish",
+    "midsommar",
+    "retro",
+    "arcade"
+  ],
+  "author": "Antigravity",
+  "license": "MIT"
+}

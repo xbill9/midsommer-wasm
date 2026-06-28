@@ -1,0 +1,15 @@
+[package]
+name = "midsommer_wasm"
+version = "1.0.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Light/minimal build configurations for WebAssembly
+[profile.release]
+opt-level = "s" # Optimize for size
+lto = true
+codegen-units = 1
+panic = "abort"

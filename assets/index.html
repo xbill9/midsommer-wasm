@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Midsommer Madness - Swedish Retro Arcade</title>
+    <!-- SEO and Meta Tags -->
+    <meta name="description" content="Help Sven reach the Maypole by sundown in this Swedish-themed action retro arcade game! Fight IKEA shoppers, drunk Swedes, and killer Dalarna horses.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            // Ignore background browser extensions/unrelated scripts
+            if (source && !source.includes('game.js') && !source.includes('index.html')) {
+                return false;
+            }
+            
+            try {
+                const errorDiv = document.createElement('div');
+                errorDiv.style.position = 'fixed';
+                errorDiv.style.top = '0';
+                errorDiv.style.left = '0';
+                errorDiv.style.width = '100%';
+                errorDiv.style.background = 'rgba(229, 62, 62, 0.95)';
+                errorDiv.style.color = '#fff';
+                errorDiv.style.padding = '25px';
+                errorDiv.style.zIndex = '99999';
+                errorDiv.style.fontFamily = 'monospace';
+                errorDiv.style.fontSize = '14px';
+                errorDiv.style.lineHeight = '1.6';
+                errorDiv.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
+                errorDiv.style.backdropFilter = 'blur(10px)';
+                errorDiv.style.borderBottom = '3px solid #feb2b2';
+                errorDiv.innerHTML = '<h3 style="margin-top:0;font-family:sans-serif;font-size:18px;">🛑 Midsommer Madness Crash Report</h3>' + 
+                                     '<strong>Error:</strong> ' + message + '<br>' +
+                                     '<strong>Source:</strong> ' + source + ' (Line ' + lineno + ', Col ' + colno + ')<br>' +
+                                     (error && error.stack ? '<br><strong>Stack Trace:</strong><pre style="margin:10px 0 0 0;background:rgba(0,0,0,0.2);padding:10px;border-radius:4px;overflow-x:auto;">' + error.stack + '</pre>' : '') +
+                                     '<br>Please report this error to the developer so we can fix it immediately!';
+                
+                if (document.body) {
+                    document.body.appendChild(errorDiv);
+                } else {
+                    document.documentElement.appendChild(errorDiv);
+                }
+            } catch (err) {
+                console.error("Error in crash reporter:", err);
+            }
+            return false;
+        };
+    </script>
+</head>
+<body>
+    <!-- Background Animated Mesh -->
+    <div class="mesh-bg"></div>
+
+    <!-- Main Application Container -->
+    <div class="app-container">
+        <!-- Premium Header -->
+        <header class="app-header">
+            <div class="header-logo">
+                <span class="logo-accent-blue">MIDSOMMER</span>
+                <span class="logo-accent-yellow">MADNESS</span>
+            </div>
+            <div class="header-tagline">Reach the Maypole before Sundown! 🇸🇪</div>
+        </header>
+
+        <!-- Main Layout Split -->
+        <main class="app-main">
+            <!-- Sidebar Left: Instructions & Swedish Lore -->
+            <aside class="sidebar sidebar-left">
+                <div class="glass-card controls-card">
+                    <h2>HOW TO PLAY</h2>
+                    <div class="control-row">
+                        <div class="key-container">
+                            <span class="keycap">W</span>
+                            <span class="keycap">A</span>
+                            <span class="keycap">S</span>
+                            <span class="keycap">D</span>
+                        </div>
+                        <span class="control-desc">Move Sven</span>
+                    </div>
+                    <div class="control-row">
+                        <div class="key-container">
+                            <span class="keycap">E</span>
+                            <span class="control-or">or</span>
+                            <span class="keycap mouse-btn">L-Click</span>
+                        </div>
+                        <span class="control-desc">Hockey Stick (Melee)</span>
+                    </div>
+                    <div class="control-row">
+                        <div class="key-container">
+                            <span class="keycap">Space</span>
+                            <span class="control-or">or</span>
+                            <span class="keycap mouse-btn">R-Click</span>
+                        </div>
+                        <span class="control-desc">Surströmming Bomb</span>
+                    </div>
+                    
+                    <div class="divider"></div>
+                    
+                    <h2>SWEDISH POWER-UPS</h2>
+                    <div class="powerup-info">
+                        <div class="powerup-item">
+                            <span class="powerup-icon meatball">🧆</span>
+                            <div>
+                                <strong>Köttbullar (Meatballs)</strong>
+                                <p>Restores 25 Energy</p>
+                            </div>
+                        </div>
+                        <div class="powerup-item">
+                            <span class="powerup-icon knackebrod">🥖</span>
+                            <div>
+                                <strong>Knäckebröd (Crispbread)</strong>
+                                <p>Temporary Speed Boost + Shield</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-card glossary-card">
+                    <h2>GLOSSARY & LORE</h2>
+                    <div class="glossary-scroll">
+                        <p><strong>Midsommar:</strong> The Swedish celebration of the Summer Solstice. Dancing around the Maypole (midsommarstång) is mandatory. Don't be late, or the pagan spirits will turn you into a Wicker Man sacrifice!</p>
+                        <p><strong>Systembolaget:</strong> The state-owned liquor shop. Swedes queue here on Midsummer Eve. Warning: crowded with very thirsty, aggressive shoppers!</p>
+                        <p><strong>Surströmming:</strong> Fermented Baltic herring. It smells so bad it can clear a room and disintegrate enemies in a cloud of biological hazard.</p>
+                        <p><strong>Dalahäst (Dalarna Horse):</strong> Traditional wooden horse. In this forest, they are giant, red, and angry.</p>
+                        <p><strong>Bobby Brown:</strong> A famous Frank Zappa song that Swedish pub patrons inexplicably sing word-for-word in karaoke.</p>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center Column: Game Canvas and Overlays -->
+            <section class="game-column">
+                <div class="game-window glass-card">
+                    <!-- Audio Control Bar -->
+                    <div class="game-top-bar">
+                        <div class="hud-sound">
+                            <button id="soundToggleBtn" class="bar-btn">
+                                <span class="btn-icon">🔊</span> Music: ON
+                            </button>
+                            <button id="sfxToggleBtn" class="bar-btn">
+                                <span class="btn-icon">💥</span> SFX: ON
+                            </button>
+                        </div>
+                        <div class="hud-level-indicator" id="currentLevelName">
+                            LEVEL 1: IKEA WAREHOUSE
+                        </div>
+                        <div class="hud-objective-tracker" id="hudObjective">
+                            DEFEAT SHOPPERS: 0 / 5
+                        </div>
+                        <div class="hud-timer-container">
+                            <span class="timer-label">SUNDOWN IN:</span>
+                            <span id="hudTimer" class="timer-value">90s</span>
+                        </div>
+                    </div>
+
+                    <!-- Canvas Wrapper for Positioning Overlays -->
+                    <div class="canvas-wrapper">
+                        <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+                        <!-- SCREEN: Title / Start Screen -->
+                        <div id="screenTitle" class="screen-overlay active">
+                            <img src="midsommer_madness_title.png" alt="Midsommer Madness Title" class="screen-bg-img">
+                            <div class="screen-content">
+                                <div class="title-logo-large">MIDSOMMER MADNESS</div>
+                                <p class="title-subtitle">Sven's Race Against the Solstice</p>
+                                <button id="startGameBtn" class="primary-btn glow-pulse">START ADVENTURE</button>
+                                <button id="howToPlayBtn" class="secondary-btn">VIEW TUTORIAL</button>
+                            </div>
+                        </div>
+
+                        <!-- SCREEN: Level Intro screen -->
+                        <div id="screenIntro" class="screen-overlay">
+                            <div class="screen-content intro-content glass-card-dark">
+                                <h2 id="introLevelNum" class="text-glow-yellow">LEVEL 1</h2>
+                                <h1 id="introLevelTitle">IKEA WAREHOUSE</h1>
+                                <p id="introLevelDesc" class="level-desc">Dodge the frenzied flat-pack shoppers and grab the Swedish meatballs to survive.</p>
+                                <div class="divider"></div>
+                                <button id="startLevelBtn" class="primary-btn">START LEVEL</button>
+                            </div>
+                        </div>
+
+                        <!-- SCREEN: Meltdown / Game Over Screen -->
+                        <div id="screenGameOver" class="screen-overlay">
+                            <img src="midsommer_meltdown.png" alt="Midsommer Meltdown Game Over" class="screen-bg-img">
+                            <div class="screen-content alert-content">
+                                <h1 class="meltdown-title text-glow-red">MELTDOWN!</h1>
+                                <p class="meltdown-subtitle">You failed to reach the maypole. The solstice is lost, and you have been sacrificed to the Wicker Man!</p>
+                                <div class="game-over-stats glass-card-dark">
+                                    <div class="stat-row"><span>Level Reached:</span><strong id="statEndLevel">IKEA</strong></div>
+                                    <div class="stat-row"><span>Final Score:</span><strong id="statEndScore">0</strong></div>
+                                    <div class="stat-row"><span>Meatballs Eaten:</span><strong id="statEndMeatballs">0</strong></div>
+                                    <div id="gameOverScoreInputRow" class="highscore-input-row" style="display:none; margin-top: 15px; flex-direction: column; gap: 8px;">
+                                        <div class="divider" style="margin: 8px 0; border-top: 1px solid var(--border-glass);"></div>
+                                        <div style="font-size: 0.8rem; color: var(--swedish-yellow); font-weight: bold; text-shadow: 0 0 5px var(--swedish-yellow-glow); text-align: center;">NEW HIGH SCORE! ENTER NAME:</div>
+                                        <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
+                                            <input type="text" id="playerNameInputGameOver" placeholder="SVEN" maxlength="12" style="background: rgba(0,0,0,0.6); border: 1px solid var(--swedish-yellow); color: white; padding: 6px 12px; font-family: inherit; font-size: 0.9rem; border-radius: 4px; outline: none; width: 140px; text-align: center;">
+                                            <button id="saveScoreBtnGameOver" class="primary-btn" style="margin: 0; padding: 6px 14px; font-size: 0.8rem;">SUBMIT</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button id="retryGameBtn" class="primary-btn glow-pulse-red">TRY AGAIN</button>
+                            </div>
+                        </div>
+
+                        <!-- SCREEN: Victory Screen -->
+                        <div id="screenVictory" class="screen-overlay">
+                            <img src="midsommer_victory.png" alt="Midsommer Victory" class="screen-bg-img">
+                            <div class="screen-content victory-content">
+                                <h1 class="victory-title text-glow-green">GRATTIS!</h1>
+                                <p class="victory-subtitle">You reached the Maypole before sundown! Midsummer is saved, and you are dancing the Frog Dance (Små Grodorna)!</p>
+                                <div class="victory-stats glass-card-dark">
+                                    <div class="stat-row"><span>Total Score:</span><strong id="statWinScore">9999</strong></div>
+                                    <div class="stat-row"><span>Time Left:</span><strong id="statWinTime">45s</strong></div>
+                                    <div class="stat-row"><span>Dalarna Horses Defeated:</span><strong id="statWinHorses">15</strong></div>
+                                    <div id="victoryScoreInputRow" class="highscore-input-row" style="display:none; margin-top: 15px; flex-direction: column; gap: 8px;">
+                                        <div class="divider" style="margin: 8px 0; border-top: 1px solid var(--border-glass);"></div>
+                                        <div style="font-size: 0.8rem; color: var(--swedish-yellow); font-weight: bold; text-shadow: 0 0 5px var(--swedish-yellow-glow); text-align: center;">NEW HIGH SCORE! ENTER NAME:</div>
+                                        <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
+                                            <input type="text" id="playerNameInputVictory" placeholder="SVEN" maxlength="12" style="background: rgba(0,0,0,0.6); border: 1px solid var(--swedish-yellow); color: white; padding: 6px 12px; font-family: inherit; font-size: 0.9rem; border-radius: 4px; outline: none; width: 140px; text-align: center;">
+                                            <button id="saveScoreBtnVictory" class="primary-btn" style="margin: 0; padding: 6px 14px; font-size: 0.8rem;">SUBMIT</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button id="restartGameBtn" class="primary-btn glow-pulse-green">DANCE AGAIN</button>
+                            </div>
+                        </div>
+
+
+
+
+                        <!-- Tutorial Overlay -->
+                        <div id="screenTutorial" class="screen-overlay">
+                            <div class="screen-content tutorial-content glass-card-dark">
+                                <h1>HOW TO PLAY</h1>
+                                <div class="tutorial-grid">
+                                    <div class="tut-step">
+                                        <div class="tut-num">1</div>
+                                        <h3>Move Sven</h3>
+                                        <p>Use <strong>W, A, S, D</strong> or arrow keys to run around.</p>
+                                    </div>
+                                    <div class="tut-step">
+                                        <div class="tut-num">2</div>
+                                        <h3>Hockey Stick</h3>
+                                        <p>Press <strong>E</strong> or <strong>Left-Click</strong> to swing Sven's trusty hockey stick. Hits enemies close by.</p>
+                                    </div>
+                                    <div class="tut-step">
+                                        <div class="tut-num">3</div>
+                                        <h3>Surströmming Bomb</h3>
+                                        <p><strong>Right-Click</strong> or press <strong>Space</strong> to lob smelly fish cans. Explodes into an AOE damage cloud.</p>
+                                    </div>
+                                    <div class="tut-step">
+                                        <div class="tut-num">4</div>
+                                        <h3>Find the Gate</h3>
+                                        <p>In each level, find the Swedish Gate (or Maypole in lvl 6) to proceed. Eat 🧆 and 🥖 for power-ups!</p>
+                                    </div>
+                                </div>
+                                <button id="closeTutorialBtn" class="secondary-btn">BACK TO MENU</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- HUD Panel below Canvas -->
+                    <div class="hud-panel">
+                        <div class="hud-item energy-item">
+                            <div class="hud-label-small">SVEN'S ENERGY</div>
+                            <div class="hud-bar-container">
+                                <div id="hudEnergyBar" class="hud-bar energy-bar" style="width: 100%;"></div>
+                                <span id="hudEnergyText" class="hud-bar-text">100 / 100</span>
+                            </div>
+                        </div>
+                        <div class="hud-item items-item">
+                            <div class="hud-label-small">SURSTRÖMMING</div>
+                            <div class="hud-ammo-container">
+                                <div id="hudAmmoGrid" class="ammo-grid">
+                                    <span class="ammo-can active">🐟</span>
+                                    <span class="ammo-can active">🐟</span>
+                                    <span class="ammo-can active">🐟</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="hud-item score-item">
+                            <div class="hud-label-small">SCORE</div>
+                            <div id="hudScore" class="hud-value">000000</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sidebar Right: Levels Tracker & High Scores -->
+            <aside class="sidebar sidebar-right">
+                <!-- Levels Tracker Card -->
+                <div class="glass-card levels-card">
+                    <h2>LEVEL PROGRESS</h2>
+                    <ul class="level-list" id="levelTrackerList">
+                        <li class="level-list-item active" data-level="1">
+                            <span class="lvl-status-dot"></span>
+                            <span class="lvl-name">1. IKEA Warehouse</span>
+                        </li>
+                        <li class="level-list-item" data-level="2">
+                            <span class="lvl-status-dot"></span>
+                            <span class="lvl-name">2. Systembolaget</span>
+                        </li>
+                        <li class="level-list-item" data-level="3">
+                            <span class="lvl-status-dot"></span>
+                            <span class="lvl-name">3. Lördagsgodis</span>
+                        </li>
+                        <li class="level-list-item" data-level="4">
+                            <span class="lvl-status-dot"></span>
+                            <span class="lvl-name">4. The Swedish Pub</span>
+                        </li>
+                        <li class="level-list-item" data-level="5">
+                            <span class="lvl-status-dot"></span>
+                            <span class="lvl-name">5. Volvo Highway</span>
+                        </li>
+                        <li class="level-list-item" data-level="6">
+                            <span class="lvl-status-dot"></span>
+                            <span class="lvl-name">6. Dalarna Forest</span>
+                        </li>
+                        <li class="level-list-item" data-level="7">
+                            <span class="lvl-status-dot"></span>
+                            <span class="lvl-name">7. Allemansrätten</span>
+                        </li>
+                        <li class="level-list-item" data-level="8">
+                            <span class="lvl-status-dot"></span>
+                            <span class="lvl-name">8. Kvinnafängelset</span>
+                        </li>
+                        <li class="level-list-item" data-level="9">
+                            <span class="lvl-status-dot"></span>
+                            <span class="lvl-name">9. Avicii Rave</span>
+                        </li>
+                        <li class="level-list-item" data-level="10">
+                            <span class="lvl-status-dot"></span>
+                            <span class="lvl-name">10. ABBA Disco (Maypole)</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- High Scores Card -->
+                <div class="glass-card leaderboard-card">
+                    <h2>SWEDISH HEROES</h2>
+                    <table class="leaderboard-table">
+                        <thead>
+                            <tr>
+                                <th>RANK</th>
+                                <th>HERO</th>
+                                <th>SCORE</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboardBody">
+                            <tr><td>1st</td><td>Sven The Great</td><td>015000</td></tr>
+                            <tr><td>2nd</td><td>Björn Ironfist</td><td>012400</td></tr>
+                            <tr><td>3rd</td><td>Linus Torvalds</td><td>009800</td></tr>
+                            <tr><td>4th</td><td>Freja Bloom</td><td>007500</td></tr>
+                            <tr><td>5th</td><td>Surströmming Fan</td><td>004500</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>Midsommer Madness © 2026. Made with Google Antigravity & Community Game-Dev skills. Glad Midsommar! 🇸🇪</p>
+        </footer>
+    </div>
+    
+    <!-- Mobile Touch Controls (Visible only on mobile/android-app) -->
+    <div id="mobileControls" class="mobile-controls">
+        <div id="joystickZone" class="joystick-zone">
+            <div id="joystickBase" class="joystick-base">
+                <div id="joystickStick" class="joystick-stick"></div>
+            </div>
+        </div>
+        <div class="action-zone">
+            <button id="btnMobileRanged" class="action-btn btn-ranged" type="button">🐟</button>
+            <button id="btnMobileMelee" class="action-btn btn-melee" type="button">🏒</button>
+        </div>
+    </div>
+
+    <!-- Load Game Scripts -->
+    <script src="wasm_binary.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
